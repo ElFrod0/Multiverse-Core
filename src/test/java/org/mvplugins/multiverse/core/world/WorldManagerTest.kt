@@ -10,7 +10,9 @@ import org.mvplugins.multiverse.core.event.world.*
 import org.mvplugins.multiverse.core.world.options.CloneWorldOptions
 import org.mvplugins.multiverse.core.world.options.CreateWorldOptions
 import org.mvplugins.multiverse.core.world.options.DeleteWorldOptions
+import org.mvplugins.multiverse.core.world.options.LoadWorldOptions
 import org.mvplugins.multiverse.core.world.options.RegenWorldOptions
+import org.mvplugins.multiverse.core.world.options.RemoveWorldOptions
 import org.mvplugins.multiverse.core.world.options.UnloadWorldOptions
 import org.mvplugins.multiverse.core.world.reasons.CloneFailureReason
 import org.mvplugins.multiverse.core.world.reasons.CreateFailureReason
@@ -102,7 +104,7 @@ class WorldManagerTest : TestWithMockBukkit() {
 
     @Test
     fun `Remove world`() {
-        assertTrue(worldManager.removeWorld(world).isSuccess)
+        assertTrue(worldManager.removeWorld(RemoveWorldOptions.world(world)).isSuccess)
         assertFalse(worldManager.getWorld("world").isDefined)
         assertFalse(worldManager.getLoadedWorld("world").isDefined)
         assertFalse(worldManager.getUnloadedWorld("world").isDefined)
@@ -132,11 +134,21 @@ class WorldManagerTest : TestWithMockBukkit() {
         assertTrue(worldManager.getWorld("world2").isDefined)
         assertTrue(worldManager.getUnloadedWorld("world2").isDefined)
 
-        assertTrue(worldManager.loadWorld("world2").isSuccess)
+        assertTrue(worldManager.loadWorld(LoadWorldOptions.world(world2)).isSuccess)
         assertTrue(world2.isLoaded)
         assertTrue(worldManager.getLoadedWorld("world2").flatMap{ w -> w.bukkitWorld }.isDefined)
         assertTrue(worldManager.getLoadedWorld("world2").isDefined)
         assertFalse(worldManager.getUnloadedWorld("world2").isDefined)
+    }
+
+    @Test
+    fun `Load world failed - invalid world folder`() {
+        assertTrue(worldManager.unloadWorld(UnloadWorldOptions.world(world2)).isSuccess)
+        File(Bukkit.getWorldContainer(), "world2/").deleteRecursively()
+        assertEquals(
+            LoadFailureReason.WORLD_FOLDER_INVALID,
+            worldManager.loadWorld(LoadWorldOptions.world(world2)).failureReason
+        )
     }
 
     @Test

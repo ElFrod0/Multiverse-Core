@@ -8,6 +8,8 @@ import org.jetbrains.annotations.NotNull;
 import org.mvplugins.multiverse.core.locale.message.Message;
 import org.mvplugins.multiverse.core.locale.message.MessageReplacement;
 
+import java.util.Locale;
+
 /**
  * All the translation keys for the core plugin
  */
@@ -149,6 +151,7 @@ public enum MVCorei18n implements MessageKeyProvider {
     MODIFY_WORLD_DESCRIPTION,
     MODIFY_PROPERTY_DESCRIPTION,
     MODIFY_VALUE_DESCRIPTION,
+    MODIFY_PROPERTYREMOVED,
     MODIFY_CANNOTHAVEVALUE,
     MODIFY_SPECIFYVALUE,
     MODIFY_SUCCESS,
@@ -181,6 +184,10 @@ public enum MVCorei18n implements MessageKeyProvider {
     SETSPAWN_DESCRIPTION,
     SETSPAWN_LOCATION_DESCRIPTION,
     SETSPAWN_WORLD_DESCRIPTION,
+    SETSPAWN_UNSAFE,
+    SETSPAWN_SUCCESS,
+    SETSPAWN_FAILED,
+    SETSPAWN_NOTMVWORLD,
 
     // /mv spawn
     SPAWN_DESCRIPTION,
@@ -254,6 +261,12 @@ public enum MVCorei18n implements MessageKeyProvider {
     ENTRYCHECK_EXCEEDPLAYERLIMIT,
     ENTRYCHECK_NOWORLDACCESS,
 
+    // economy
+    ECONOMY_ITEM_DEPOSIT,
+    ECONOMY_ITEM_WITHDRAW,
+    ECONOMY_VAULT_DEPOSIT,
+    ECONOMY_VAULT_WITHDRAW,
+
     // multiverse parse destination failure reason
     DESTINATION_ANCHOR_FAILUREREASON_ANCHORNOTFOUND,
     DESTINATION_BED_FAILUREREASON_PLAYERNOTFOUND,
@@ -295,11 +308,13 @@ public enum MVCorei18n implements MessageKeyProvider {
     IMPORTWORLD_WORLDEXISTUNLOADED,
     IMPORTWORLD_WORLDEXISTLOADED,
     IMPORTWORLD_WORLDFOLDERINVALID,
+    IMPORTWORLD_BUKKITENVIRONMENTMISMATCH,
 
     LOADWORLD_WORLDALREADYLOADING,
     LOADWORLD_WORLDNONEXISTENT,
     LOADWORLD_WORLDEXISTFOLDER,
     LOADWORLD_WORLDEXISTLOADED,
+    LOADWORLD_BUKKITENVIRONMENTMISMATCH,
 
     REMOVEWORLD_WORLDNONEXISTENT,
 
@@ -341,7 +356,8 @@ public enum MVCorei18n implements MessageKeyProvider {
 
     // END CHECKSTYLE-SUPPRESSION: Javadoc
 
-    private final MessageKey key = MessageKey.of("mv-core." + this.name().replace('_', '.').toLowerCase());
+    private final MessageKey key = MessageKey.of("mv-core." + this.name().replace('_', '.')
+            .toLowerCase(Locale.ENGLISH));
 
     /**
      * {@inheritDoc}

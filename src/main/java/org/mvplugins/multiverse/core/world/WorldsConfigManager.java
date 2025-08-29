@@ -84,7 +84,7 @@ final class WorldsConfigManager {
                     Path oldWorldConfig = worldConfigFile.toPath().getParent().resolve(CONFIG_FILENAME + ".old");
                     Files.copy(worldConfigFile.toPath(), oldWorldConfig, COPY_ATTRIBUTES);
 
-                    return configData.replace("==: MVWorld", "")
+                    return configData.replace("==: MVWorld", "w@: world")
                             .replace("==: MVSpawnSettings", "")
                             .replace("==: MVSpawnSubSettings", "")
                             .replace("==: MVEntryFee", "");
@@ -92,16 +92,26 @@ final class WorldsConfigManager {
                 .andThenTry(configData -> Files.writeString(worldConfigFile.toPath(), configData))
                 .andThenTry(() -> {
                     YamlConfiguration config = YamlConfiguration.loadConfiguration(worldConfigFile);
-                    List<ConfigurationSection> worlds = config.getConfigurationSection("worlds")
-                            .getKeys(false)
-                            .stream()
-                            .map(worldName -> config.getConfigurationSection("worlds." + worldName))
-                            .toList();
+
+                    ConfigurationSection worldsSection = config.getConfigurationSection("worlds");
+                    if (worldsSection == null) {
+                        worldsSection = config.createSection("worlds");
+                    }
+
+                    List<String> worldNames = getOldConfigWorldNames(worldsSection);
+
+                    Map<String, ConfigurationSection> worldConfigMap = new HashMap<>();
+                    for (String worldName : worldNames) {
+                        ConfigurationSection worldSection = worldsSection.getConfigurationSection(worldName);
+                        if (worldSection != null) {
+                            worldConfigMap.put(worldName, worldSection);
+                        }
+                    }
 
                     config.set("worlds", null);
 
-                    for (ConfigurationSection world : worlds) {
-                        config.createSection(world.getName(), world.getValues(true));
+                    for (Map.Entry<String, ConfigurationSection> entry : worldConfigMap.entrySet()) {
+                        config.set(encodeWorldName(entry.getKey()), entry.getValue());
                     }
                     config.save(worldConfigFile);
                 })
@@ -115,13 +125,46 @@ final class WorldsConfigManager {
                 });
     }
 
+    private @NotNull List<String> getOldConfigWorldNames(ConfigurationSection worldsSection) {
+        List<String> worldNames = new ArrayList<>();
+        recursiveGetOldConfigWorldNames(worldsSection, worldNames);
+        return worldNames;
+    }
+
+    private void recursiveGetOldConfigWorldNames(ConfigurationSection section, List<String> worldNames) {
+        Set<String> keys = section.getKeys(false);
+        if (keys.isEmpty()) {
+            // No keys in this section, nothing to do
+            return;
+        }
+
+        if (keys.contains("w@")) {
+            // this is the world data section already, get path without the "worlds." prefix
+            worldNames.add(section.getCurrentPath().substring(7));
+            return;
+        }
+
+        for (String key : keys) {
+            ConfigurationSection dataSection = section.getConfigurationSection(key);
+            if (dataSection == null) {
+                // Something is wrong with the config, skip this key
+                continue;
+            }
+            recursiveGetOldConfigWorldNames(dataSection, worldNames);
+        }
+    }
+
     /**
      * Parses the worlds.yml file and creates a WorldConfig for each world in the file if it doesn't already exist.
      *
      * @return A tuple containing a list of the new WorldConfigs added and a list of the worlds removed from the config.
      */
     private NewAndRemovedWorlds parseNewAndRemovedWorlds() {
-        Set<String> allWorldsInConfig = worldsConfig.getKeys(false);
+        List<String> allWorldsInConfig = worldsConfig.getKeys(false)
+                .stream()
+                .map(this::decodeWorldName)
+                .toList();
+
         List<WorldConfig> newWorldsAdded = new ArrayList<>();
 
         for (String worldName : allWorldsInConfig) {
@@ -174,7 +217,7 @@ final class WorldsConfigManager {
                 worldConfig.save().onFailure(e -> {
                     throw new RuntimeException("Failed to save world config: " + worldName, e);
                 });
-                worldsConfig.set(worldName, worldConfig.getConfigurationSection());
+                worldsConfig.set(encodeWorldName(worldName), worldConfig.getConfigurationSection());
             });
             worldsConfig.save(worldConfigFile);
         }).onFailure(e -> {
@@ -214,7 +257,7 @@ final class WorldsConfigManager {
      */
     public void deleteWorldConfig(@NotNull String worldName) {
         worldConfigMap.remove(worldName);
-        worldsConfig.set(worldName, null);
+        worldsConfig.set(encodeWorldName(worldName), null);
     }
 
     /**
@@ -225,9 +268,21 @@ final class WorldsConfigManager {
      * @return The {@link ConfigurationSection} for the given world.
      */
     private ConfigurationSection getWorldConfigSection(String worldName) {
+        worldName = encodeWorldName(worldName);
         return worldsConfig.isConfigurationSection(worldName)
                 ? worldsConfig.getConfigurationSection(worldName)
                 : worldsConfig.createSection(worldName);
+    }
+
+    /**
+     * Dot is a special character in YAML that causes sub-path issues.
+     */
+    private String encodeWorldName(String worldName) {
+        return worldName.replace(".", "[dot]");
+    }
+
+    private String decodeWorldName(String worldName) {
+        return worldName.replace("[dot]", ".");
     }
 
     private static final class ConfigMigratedException extends RuntimeException {

@@ -33,12 +33,15 @@ import org.mvplugins.multiverse.core.MultiverseCore;
 import org.mvplugins.multiverse.core.command.MVCommandManager;
 import org.mvplugins.multiverse.core.config.CoreConfig;
 import org.mvplugins.multiverse.core.destination.DestinationsProvider;
+import org.mvplugins.multiverse.core.dynamiclistener.EventRunnable;
 import org.mvplugins.multiverse.core.dynamiclistener.annotations.DefaultEventPriority;
+import org.mvplugins.multiverse.core.dynamiclistener.annotations.EventClass;
 import org.mvplugins.multiverse.core.dynamiclistener.annotations.EventMethod;
 import org.mvplugins.multiverse.core.dynamiclistener.annotations.EventPriorityKey;
 import org.mvplugins.multiverse.core.economy.MVEconomist;
 import org.mvplugins.multiverse.core.event.MVRespawnEvent;
 import org.mvplugins.multiverse.core.locale.PluginLocales;
+import org.mvplugins.multiverse.core.permissions.CorePermissionsChecker;
 import org.mvplugins.multiverse.core.teleportation.BlockSafety;
 import org.mvplugins.multiverse.core.teleportation.TeleportQueue;
 import org.mvplugins.multiverse.core.utils.result.ResultChain;
@@ -68,6 +71,7 @@ final class MVPlayerListener implements CoreListener {
     private final DestinationsProvider destinationsProvider;
     private final EnforcementHandler enforcementHandler;
     private final DimensionFinder dimensionFinder;
+    private final CorePermissionsChecker corePermissionsChecker;
 
     private final Map<String, String> playerWorld = new ConcurrentHashMap<>();
 
@@ -84,7 +88,8 @@ final class MVPlayerListener implements CoreListener {
             Provider<MVCommandManager> commandManagerProvider,
             DestinationsProvider destinationsProvider,
             EnforcementHandler enforcementHandler,
-            DimensionFinder dimensionFinder) {
+            DimensionFinder dimensionFinder,
+            CorePermissionsChecker corePermissionsChecker) {
         this.plugin = plugin;
         this.config = config;
         this.worldManagerProvider = worldManagerProvider;
@@ -97,6 +102,7 @@ final class MVPlayerListener implements CoreListener {
         this.destinationsProvider = destinationsProvider;
         this.enforcementHandler = enforcementHandler;
         this.dimensionFinder = dimensionFinder;
+        this.corePermissionsChecker = corePermissionsChecker;
     }
 
     private WorldManager getWorldManager() {
@@ -195,59 +201,68 @@ final class MVPlayerListener implements CoreListener {
         return Option.of(mvWorld.getSpawnLocation());
     }
 
-    @EventMethod
+    @EventClass("org.spigotmc.event.player.PlayerSpawnLocationEvent")
     @EventPriorityKey("mvcore-player-spawn-location")
-    void playerSpawnLocation(PlayerSpawnLocationEvent event) {
-        Player player = event.getPlayer();
-        MultiverseWorld world = getWorldManager().getLoadedWorld(player.getWorld()).getOrNull();
-        if (world == null) {
-            Logging.finer("Player joined in a world that is not managed by Multiverse.");
-            return;
-        }
-        if (!player.hasPlayedBefore()) {
-            handleFirstSpawn(event);
-        } else {
-            handleJoinLocation(event);
-        }
-        this.handleGameModeAndFlight(player, event.getSpawnLocation().getWorld());
-    }
+    EventRunnable playerSpawnLocation() {
+        return new EventRunnable<PlayerSpawnLocationEvent>() {
+            @Override
+            public void onEvent(PlayerSpawnLocationEvent event) {
+                Player player = event.getPlayer();
+                MultiverseWorld world = getWorldManager().getLoadedWorld(player.getWorld()).getOrNull();
+                if (world == null) {
+                    Logging.finer("Player joined in a world that is not managed by Multiverse.");
+                    return;
+                }
+                if (!player.hasPlayedBefore()) {
+                    handleFirstSpawn(event);
+                } else {
+                    handleJoinLocation(event);
+                }
+                handleGameModeAndFlight(player, event.getSpawnLocation().getWorld());
+            }
 
-    private void handleFirstSpawn(PlayerSpawnLocationEvent event) {
-        if (!config.getFirstSpawnOverride()) {
-            Logging.finer("FirstSpawnOverride is disabled");
-            // User has disabled the feature in config
-            return;
-        }
-        Logging.fine("Moving NEW player to(firstspawnoverride): %s", config.getFirstSpawnLocation());
-        destinationsProvider.parseDestination(config.getFirstSpawnLocation())
-                .map(destination -> destination.getLocation(event.getPlayer())
-                        .peek(event::setSpawnLocation)
-                        .onEmpty(() -> Logging.warning("The destination in FirstSpawnLocation in config is invalid")))
-                .onFailure(failure -> {
-                    Logging.warning("Invalid destination in FirstSpawnLocation in config: %s");
-                    Logging.warning(failure.getFailureMessage().formatted(getLocales()));
-                });
-    }
+            private void handleFirstSpawn(PlayerSpawnLocationEvent event) {
+                if (!config.getFirstSpawnOverride()) {
+                    Logging.finer("FirstSpawnOverride is disabled");
+                    // User has disabled the feature in config
+                    return;
+                }
+                Logging.fine("Moving NEW player to(firstspawnoverride): %s", config.getFirstSpawnLocation());
+                destinationsProvider.parseDestination(config.getFirstSpawnLocation())
+                        .map(destination -> destination.getLocation(event.getPlayer())
+                                .peek(event::setSpawnLocation)
+                                .onEmpty(() -> Logging.warning("The destination in FirstSpawnLocation in config is invalid")))
+                        .onFailure(failure -> {
+                            Logging.warning("Invalid destination in FirstSpawnLocation in config: %s");
+                            Logging.warning(failure.getFailureMessage().formatted(getLocales()));
+                        });
+            }
 
-    private void handleJoinLocation(PlayerSpawnLocationEvent event) {
-        if (!config.getEnableJoinDestination()) {
-            Logging.finer("JoinDestination is disabled");
-            // User has disabled the feature in config
-            return;
-        }
-        if (config.getJoinDestination().isBlank()) {
-            Logging.warning("Joindestination is enabled but no destination has been specified in config!");
-            return;
-        }
-        Logging.finer("JoinDestination is " + config.getJoinDestination());
-        destinationsProvider.parseDestination(config.getJoinDestination())
-                .map(destination -> destination.getLocation(event.getPlayer())
-                    .peek(event::setSpawnLocation)
-                    .onEmpty(() -> Logging.warning("The destination in JoinDestination in config is invalid")))
-                .onFailure(failure -> {
-                    Logging.warning("Invalid destination in JoinDestination in config: %s");
-                    Logging.warning(failure.getFailureMessage().formatted(getLocales()));
-                });
+            private void handleJoinLocation(PlayerSpawnLocationEvent event) {
+                if (!config.getEnableJoinDestination()) {
+                    Logging.finer("JoinDestination is disabled");
+                    // User has disabled the feature in config
+                    return;
+                }
+                if (config.getJoinDestination().isBlank()) {
+                    Logging.warning("Joindestination is enabled but no destination has been specified in config!");
+                    return;
+                }
+                if (corePermissionsChecker.hasJoinLocationBypassPermission(event.getPlayer())) {
+                    Logging.finer("Player %s has bypass permission for JoinDestination", event.getPlayer().getName());
+                    return;
+                }
+                Logging.finer("JoinDestination is " + config.getJoinDestination());
+                destinationsProvider.parseDestination(config.getJoinDestination())
+                        .map(destination -> destination.getLocation(event.getPlayer())
+                                .peek(event::setSpawnLocation)
+                                .onEmpty(() -> Logging.warning("The destination in JoinDestination in config is invalid")))
+                        .onFailure(failure -> {
+                            Logging.warning("Invalid destination in JoinDestination in config: %s");
+                            Logging.warning(failure.getFailureMessage().formatted(getLocales()));
+                        });
+            }
+        };
     }
 
     /**
@@ -318,7 +333,6 @@ final class MVPlayerListener implements CoreListener {
                 .onSuccessReason(EntryFeeResult.Success.class, reason -> {
                     if (reason == EntryFeeResult.Success.ENOUGH_MONEY) {
                         economist.payEntryFee((Player) finalTeleporter, toWorld);
-                        // Send payment receipt
                     }
                 })
                 .onFailure(results -> {

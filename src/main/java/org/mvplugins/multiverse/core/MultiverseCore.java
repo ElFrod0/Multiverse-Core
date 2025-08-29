@@ -15,6 +15,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.serialization.ConfigurationSerialization;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jvnet.hk2.annotations.Service;
 
@@ -225,12 +226,11 @@ public class MultiverseCore extends MultiverseModule {
      * Logs the enable message.
      */
     private void logEnableMessage() {
-        Logging.config("Version %s (API v%s) Enabled - By %s",
+        Logging.config("\u001B[32mVersion %s (API v%s) Enabled - By %s\u001B[39m",
                 this.getDescription().getVersion(), getVersionAsNumber(), StringFormatter.joinAnd(getDescription().getAuthors()));
 
         if (configProvider.get().isShowingDonateMessage()) {
-            Logging.config("Help dumptruckman keep this project alive. Become a patron! https://www.patreon.com/dumptruckman");
-            Logging.config("One time donations are also appreciated: https://www.paypal.me/dumptruckman");
+            Logging.config("\u001B[32mLoving Multiverse-Core? Please consider supporting the project with a small donation: https://github.com/sponsors/Multiverse\u001B[39m");
         }
     }
 
@@ -238,7 +238,11 @@ public class MultiverseCore extends MultiverseModule {
      * Gets the MultiverseCoreApi
      *
      * @return The MultiverseCoreApi
+     *
+     * @deprecated Use {@link MultiverseCoreApi#get()} directly.
      */
+    @Deprecated(since = "5.1", forRemoval = true)
+    @ApiStatus.ScheduledForRemoval(inVersion = "6.0")
     public MultiverseCoreApi getApi() {
         return MultiverseCoreApi.get();
     }

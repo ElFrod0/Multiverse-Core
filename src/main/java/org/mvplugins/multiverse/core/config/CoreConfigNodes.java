@@ -4,7 +4,7 @@ import com.dumptruckman.minecraft.util.Logging;
 import io.vavr.control.Try;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
-import org.bukkit.Bukkit;
+import org.bukkit.command.CommandSender;
 import org.bukkit.event.EventPriority;
 import org.bukkit.plugin.PluginManager;
 
@@ -19,12 +19,13 @@ import org.mvplugins.multiverse.core.config.node.Node;
 import org.mvplugins.multiverse.core.config.node.NodeGroup;
 import org.mvplugins.multiverse.core.config.node.functions.NodeStringParser;
 import org.mvplugins.multiverse.core.config.node.serializer.NodeSerializer;
+import org.mvplugins.multiverse.core.destination.DestinationInstance;
 import org.mvplugins.multiverse.core.destination.DestinationsProvider;
-import org.mvplugins.multiverse.core.destination.core.WorldDestination;
 import org.mvplugins.multiverse.core.dynamiclistener.EventPriorityMapper;
 import org.mvplugins.multiverse.core.event.MVDebugModeEvent;
 import org.mvplugins.multiverse.core.exceptions.MultiverseException;
 import org.mvplugins.multiverse.core.permissions.PermissionUtils;
+import org.mvplugins.multiverse.core.teleportation.PassengerModes;
 import org.mvplugins.multiverse.core.world.helpers.DimensionFinder.DimensionFormat;
 
 import java.util.Collection;
@@ -93,7 +94,6 @@ final class CoreConfigNodes {
             .build());
 
     final ConfigNode<Boolean> autoImportDefaultWorlds = node(ConfigNode.builder("world.auto-import-default-worlds", Boolean.class)
-            .comment("")
             .comment("When enabled, Multiverse will automatically import default worlds defined in the server.properties")
             .comment("`level-name` property when the Multiverse is enabled or reloaded. This will include the nether and ")
             .comment("end if the server created them.")
@@ -110,6 +110,7 @@ final class CoreConfigNodes {
             .build());
 
     final ConfigNode<Boolean> enforceAccess = node(ConfigNode.builder("world.enforce-access", Boolean.class)
+            .comment("")
             .comment("This setting will prevent players from entering worlds they don't have access to.")
             .comment("If this is set to false, players will be able to enter any world they want.")
             .comment("If this is set to true, players will only be able to enter worlds they have")
@@ -134,6 +135,24 @@ final class CoreConfigNodes {
             .comment("Disabling this will make the world property `allow-flight` have no effect.")
             .defaultValue(true)
             .name("enforce-flight")
+            .build());
+
+    final ConfigNode<Boolean> applyEntitySpawnRate = node(ConfigNode.builder("world.apply-entity-spawn-rate", Boolean.class)
+            .comment("")
+            .comment("Sets whether Multiverse will apply the world's entity `tick-rate` config in worlds.yml.")
+            .comment("If disabled, the `tick-rate` config in worlds.yml will be ignored.")
+            .comment("Disable this if you want paper-world.yml or another plugin to handle entity spawn rate per world.")
+            .defaultValue(true)
+            .name("apply-entity-spawn-rate")
+            .build());
+
+    final ConfigNode<Boolean> applyEntitySpawnLimit = node(ConfigNode.builder("world.apply-entity-spawn-limit", Boolean.class)
+            .comment("")
+            .comment("Sets whether Multiverse will apply the world's entity `spawn-limit` config when a world is loaded.")
+            .comment("If disabled, the `spawn-limit` config in worlds.yml will be ignored.")
+            .comment("Disable this if you want paper-world.yml or another plugin to handle entity limits per world.")
+            .defaultValue(true)
+            .name("apply-entity-spawn-limit")
             .build());
 
     final ConfigNode<Boolean> autoPurgeEntities = node(ConfigNode.builder("world.auto-purge-entities", Boolean.class)
@@ -181,6 +200,20 @@ final class CoreConfigNodes {
             .comment("  - For spawn: `multiverse.core.spawn.<self|other>`")
             .defaultValue(true)
             .name("use-finer-teleport-permissions")
+            .build());
+
+    final ConfigNode<PassengerModes> passengerMode = node(ConfigNode.builder("teleport.passenger-mode", PassengerModes.class)
+            .comment("")
+            .comment("Configures how passengers and vehicles are handled when an entity is teleported.")
+            .comment("  default: Server will handle passengers and vehicles, this usually means entities will not be teleported to a different world if they have passengers.")
+            .comment("  dismount_passengers: Passengers will be removed from the parent entity before the teleport.")
+            .comment("  dismount_vehicle: Vehicle will be removed and from the parent entity before the teleport.")
+            .comment("  dismount_all: All passengers and vehicles will be removed from the parent entity before the teleport.")
+            .comment("  retain_passengers: Passengers will teleport together with the parent entity.")
+            .comment("  retain_vehicle: Vehicles will teleport together with the parent entity.")
+            .comment("  retain_all: All passengers and vehicles will teleport together with the parent entity.")
+            .defaultValue(PassengerModes.DEFAULT)
+            .name("passenger-mode")
             .build());
 
     final ConfigNode<Integer> concurrentTeleportLimit = node(ConfigNode.builder("teleport.concurrent-teleport-limit", Integer.class)
@@ -237,6 +270,7 @@ final class CoreConfigNodes {
             .defaultValue("")
             .name("first-spawn-location")
             .suggester(this::suggestDestinations)
+            .stringParser(this::parseDestinationString)
             .build());
 
     final ConfigNode<Boolean> enableJoinDestination = node(ConfigNode.builder("spawn.enable-join-destination", Boolean.class)
@@ -254,6 +288,7 @@ final class CoreConfigNodes {
             .defaultValue("")
             .name("join-destination")
             .suggester(this::suggestDestinations)
+            .stringParser(this::parseDestinationString)
             .build());
 
     final ConfigNode<Boolean> defaultRespawnInOverworld = node(ConfigNode.builder("spawn.default-respawn-in-overworld", Boolean.class)
@@ -501,6 +536,7 @@ final class CoreConfigNodes {
             .build());
 
     final ConfigNode<Boolean> debugPermissions = node(ConfigNode.builder("misc.debug-permissions", Boolean.class)
+            .comment("")
             .comment("Sets whether console will log every permission check done by all multiverse plugins.")
             .comment("This will only work if the above 'global-debug' is set to 1 or more.")
             .defaultValue(false)
@@ -532,15 +568,14 @@ final class CoreConfigNodes {
             .hidden()
             .build());
 
-    // todo: Maybe combine with the similar method in MVCommandCompletion but that has permission checking
-    private Collection<String> suggestDestinations(String input) {
-        return destinationsProvider.get().getDestinations().stream()
-                .flatMap(destination -> destination.suggestDestinations(Bukkit.getConsoleSender(), null)
-                        .stream()
-                        .map(packet -> destination instanceof WorldDestination
-                                ? packet.destinationString()
-                                : destination.getIdentifier() + ":" + packet.destinationString()))
-                .toList();
+    private Collection<String> suggestDestinations(CommandSender sender, String input) {
+        return destinationsProvider.get().suggestDestinationStrings(sender, input);
+    }
+
+    private Try<String> parseDestinationString(CommandSender sender, String input, Class<String> type) {
+        return destinationsProvider.get().parseDestination(sender, input)
+                .map(DestinationInstance::toString)
+                .toTry();
     }
 
     private static final class DimensionFormatNodeSerializer implements NodeSerializer<DimensionFormat> {

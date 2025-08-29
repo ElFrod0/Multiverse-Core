@@ -49,7 +49,7 @@ class WorldConfigMangerTest : TestWithMockBukkit() {
         assertEquals(MVEconomist.VAULT_ECONOMY_MATERIAL, endWorldConfig.entryFeeCurrency)
         assertEquals(0.0, endWorldConfig.entryFeeAmount)
 
-        val worldConfig = worldConfigManager.getWorldConfig("world").orNull
+        val worldConfig = worldConfigManager.getWorldConfig("world.a.b").orNull
         assertNotNull(worldConfig)
 
         assertEquals(-5176596003035866649, worldConfig.seed)
@@ -58,15 +58,23 @@ class WorldConfigMangerTest : TestWithMockBukkit() {
         assertEquals(Material.DIRT, worldConfig.entryFeeCurrency)
         assertEquals(5.0, worldConfig.entryFeeAmount)
 
+        val world2Config = worldConfigManager.getWorldConfig("world.a.c").orNull
+        assertNotNull(world2Config)
+
         assertConfigEquals("/worlds/migrated_worlds.yml", "worlds.yml")
     }
 
     @Test
     fun `Add a new world to config`() {
-        val worldConfig = worldConfigManager.addWorldConfig("newworld")
+        val worldConfig = worldConfigManager.addWorldConfig("new.world")
         assertNotNull(worldConfig)
-        assertEquals("newworld", worldConfig.worldName)
+        assertEquals("new.world", worldConfig.worldName)
         assertTrue(worldConfigManager.save().isSuccess)
+        assertConfigEquals("/worlds/newworld_worlds.yml", "worlds.yml")
+
+        // Make sure the world still can be loaded after save
+        assertTrue(worldConfigManager.load().isSuccess)
+        assertEquals("new.world", worldConfigManager.getWorldConfig("new.world").orNull?.worldName)
         assertConfigEquals("/worlds/newworld_worlds.yml", "worlds.yml")
     }
 

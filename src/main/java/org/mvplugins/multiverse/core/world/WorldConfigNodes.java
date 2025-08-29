@@ -16,6 +16,7 @@ import org.bukkit.configuration.MemoryConfiguration;
 import org.jetbrains.annotations.NotNull;
 
 import org.mvplugins.multiverse.core.MultiverseCore;
+import org.mvplugins.multiverse.core.config.CoreConfig;
 import org.mvplugins.multiverse.core.config.node.serializer.NodeSerializer;
 import org.mvplugins.multiverse.core.event.world.MVWorldPropertyChangedEvent;
 import org.mvplugins.multiverse.core.config.node.ConfigNode;
@@ -37,11 +38,13 @@ final class WorldConfigNodes {
     private final NodeGroup nodes = new NodeGroup();
     private WorldManager worldManager;
     private EnforcementHandler enforcementHandler;
+    private CoreConfig config;
     private MultiverseWorld world = null;
 
     WorldConfigNodes(@NotNull MultiverseCore multiverseCore) {
         this.worldManager = multiverseCore.getServiceLocator().getService(WorldManager.class);
         this.enforcementHandler = multiverseCore.getServiceLocator().getService(EnforcementHandler.class);
+        this.config = multiverseCore.getServiceLocator().getService(CoreConfig.class);
     }
 
     MultiverseWorld getWorld() {
@@ -238,13 +241,13 @@ final class WorldConfigNodes {
                 if (!(world instanceof LoadedMultiverseWorld loadedWorld)) return;
                 if (newValue == null || newValue instanceof NullSpawnLocation) return;
                 loadedWorld.getBukkitWorld().peek(bukkitWorld -> {
-                    bukkitWorld.setSpawnLocation(newValue.getBlockX(), newValue.getBlockY(), newValue.getBlockZ());
+                    bukkitWorld.setSpawnLocation(newValue);
                     newValue.setWorld(bukkitWorld);
                 });
             }));
 
     final ConfigNode<EntitySpawnConfig> enititySpawnConfig = node(ConfigNode.builder("spawning", EntitySpawnConfig.class)
-            .defaultValue(() -> EntitySpawnConfig.fromSection(new MemoryConfiguration()))
+            .defaultValue(() -> EntitySpawnConfig.fromSection(config, new MemoryConfiguration()))
             .hidden()
             .serializer(new NodeSerializer<>() {
                 @Override
@@ -252,7 +255,7 @@ final class WorldConfigNodes {
                     ConfigurationSection spawnSection = (object instanceof ConfigurationSection section)
                             ? section
                             : new MemoryConfiguration();
-                    return EntitySpawnConfig.fromSection(spawnSection);
+                    return EntitySpawnConfig.fromSection(config, spawnSection);
                 }
 
                 @Override
